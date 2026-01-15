@@ -1,0 +1,59 @@
+name: SuperAI Security Scan
+
+on:
+  schedule:
+    - cron: "0 9 * * 1"  # Weekly Monday 9am UTC
+  workflow_dispatch:
+
+jobs:
+  security-scan:
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
+      pull-requests: write
+      issues: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+
+      - name: Run OpenCode Security Audit
+        uses: anomalyco/opencode/github@latest
+        env:
+          ZHIPU_API_KEY: ${{ secrets.ZHIPU_API_KEY }}
+        with:
+          model: zai/glm-4.7
+          agent: security-auditor
+          prompt: |
+            Perform a comprehensive security audit of this codebase:
+
+            1. **OWASP Top 10 Check** - Scan for:
+               - Injection vulnerabilities (SQL, NoSQL, OS command, LDAP)
+               - Broken authentication & session management
+               - Cross-site scripting (XSS)
+               - Broken access control
+               - Security misconfiguration
+               - Sensitive data exposure
+               - Insufficient attack protection
+               - CSRF vulnerabilities
+               - Using components with known vulnerabilities
+               - Logging errors without proper context
+
+            2. **Secret Scanning** - Look for:
+               - Hardcoded API keys, passwords, tokens
+               - Exposed credentials in config files
+               - Secrets in environment files that shouldn't be committed
+
+            3. **Dependency Review** - Check for:
+               - Outdated packages with known vulnerabilities
+               - Unnecessary dependencies
+
+            For each issue found, provide:
+            - Severity level (Critical/High/Medium/Low)
+            - File and line number
+            - Description of the vulnerability
+            - Recommended fix
+
+            If critical or high-severity issues are found, create a GitHub issue to track them.

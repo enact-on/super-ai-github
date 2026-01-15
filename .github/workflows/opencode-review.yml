@@ -1,0 +1,91 @@
+name: SuperAI Review
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+  workflow_dispatch:
+
+jobs:
+  review:
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
+      pull-requests: write
+      issues: read
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Get PR context
+        id: context
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          # Get changed files
+          echo "changed_files=$(gh pr view $PR_NUMBER --json files --jq '.files[].path' | tr '\n' ',')" >> $GITHUB_OUTPUT
+
+          # Get associated issues (if any are linked via "fixes #123" or similar)
+          echo "linked_issues=$(gh pr view $PR_NUMBER --json body --jq '.body' | grep -oE '#[0-9]+' | tr -d '#' | tr '\n' ',' || echo 'none')" >> $GITHUB_OUTPUT
+
+      - name: Run OpenCode Review
+        uses: anomalyco/opencode/github@latest
+        env:
+          ZHIPU_API_KEY: ${{ secrets.ZHIPU_API_KEY }}
+        with:
+          model: zai/glm-4.7
+          agent: orchestrator
+          prompt: |
+            Review this pull request focusing on the changed files.
+
+            ## PR Details
+            Title: ${{ github.event.pull_request.title }}
+            Body: ${{ github.event.pull_request.body }}
+            Author: ${{ github.event.pull_request.user.login }}
+            Changed Files: ${{ steps.context.outputs.changed_files }}
+            Linked Issues: ${{ steps.context.outputs.linked_issues }}
+
+            First, get the diff of changes:
+            `git diff origin/main...HEAD --name-only`
+
+            Then analyze each changed file:
+
+            1. **Code Quality** - Check for:
+               - Readability and maintainability
+               - Consistent naming conventions
+               - Proper error handling
+               - Code duplication
+
+            2. **Potential Issues** - Look for:
+               - Edge cases and null checks
+               - Race conditions or async issues
+               - Resource leaks (unclosed connections, memory)
+               - Performance bottlenecks
+
+            3. **Testing** - Verify:
+               - New code has test coverage
+               - Tests cover edge cases
+               - Test naming is descriptive
+
+            4. **Documentation** - Check:
+               - Complex logic is commented
+               - API changes are documented
+               - Breaking changes are noted
+
+            5. **Linked Issues** - If issues are linked, verify the PR addresses them
+
+            Format your review as:
+            ## Summary
+            [Brief overview of changes]
+
+            ## Issues Found
+            - **Critical**: [blockers that must be fixed]
+            - **Important**: [should fix before merge]
+            - **Suggestions**: [nice-to-have improvements]
+
+            ## Positive Notes
+            [What was done well]
