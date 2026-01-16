@@ -49,12 +49,8 @@
     "context7": {
       "type": "remote",
       "url": "https://mcp.context7.com/mcp",
-      "enabled": true
-    },
-    "sequentialthinking": {
-      "type": "remote",
-      "url": "https://remote.mcpservers.org/sequentialthinking/mcp",
-      "enabled": true
+      "enabled": true,
+      "description": "Library documentation and code context - FREE public MCP"
     }
   },
   "agent": {
@@ -118,6 +114,24 @@
           "cat*": "allow",
           "ls*": "allow"
         }
+      }
+    },
+    "testing-specialist": {
+      "mode": "subagent",
+      "model": "zai/glm-4.7",
+      "temperature": 0.2
+    },
+    "devops-specialist": {
+      "mode": "subagent",
+      "model": "zai/glm-4.7",
+      "temperature": 0.2
+    },
+    "documentation-writer": {
+      "mode": "subagent",
+      "model": "zai/glm-4.7",
+      "temperature": 0.4,
+      "tools": {
+        "bash": false
       }
     }
   }

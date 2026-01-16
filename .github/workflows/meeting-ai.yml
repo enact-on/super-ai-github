@@ -20,6 +20,11 @@ on:
           - feedback
           - approve
 
+# Prevent concurrent runs for the same issue to avoid state conflicts
+concurrency:
+  group: meeting-ai-${{ github.event.issue.number || github.event.pull_request.number || inputs.issue_number }}
+  cancel-in-progress: false
+
 jobs:
   meeting-ai:
     runs-on: ubuntu-latest
@@ -30,9 +35,10 @@ jobs:
       pull-requests: write
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v6
+        uses: actions/checkout@v4
         with:
-          persist-credentials: false
+          fetch-depth: 1
+          token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Check command
         id: check
@@ -45,35 +51,40 @@ jobs:
             echo "issue_number=${{ inputs.issue_number }}" >> $GITHUB_OUTPUT
             echo "triggered_by=workflow_dispatch" >> $GITHUB_OUTPUT
           elif echo "$COMMENT_BODY" | grep -q '/meeting-ai'; then
-            # Extract command from comment
-            cmd=$(echo "$COMMENT_BODY" | grep -oP '/meeting-ai\s+\K\w+' || echo "paste")
+            # Extract command from comment (paste, feedback, or approve)
+            cmd=$(echo "$COMMENT_BODY" | grep -oE '/meeting-ai\s+(paste|feedback|approve)' | awk '{print $2}' || echo "paste")
             echo "command=$cmd" >> $GITHUB_OUTPUT
             echo "issue_number=${{ github.event.issue.number || github.event.pull_request.number }}" >> $GITHUB_OUTPUT
             echo "triggered_by=comment" >> $GITHUB_OUTPUT
           else
             echo "No meeting-ai command found"
-            exit 1
+            exit 0
           fi
 
       - name: Load state file
         id: load_state
+        if: steps.check.outputs.command != ''
         env:
           GH_TOKEN: ${{ github.token }}
           ISSUE_NUMBER: ${{ steps.check.outputs.issue_number }}
         run: |
           STATE_FILE=".github/meeting-ai-state.json"
-          STATE_DIR=".github"
 
           # Create state file if it doesn't exist
           if [ ! -f "$STATE_FILE" ]; then
+            mkdir -p .github
             echo '{"sessions":{}}' > "$STATE_FILE"
-            git add "$STATE_FILE" 2>/dev/null || true
           fi
 
           # Load state for this issue
           SESSION_KEY="issue-$ISSUE_NUMBER"
-          CURRENT_STATE=$(cat "$STATE_FILE" | jq -r ".sessions[\"$SESSION_KEY\"] // {}")
-          echo "state=$CURRENT_STATE" >> $GITHUB_OUTPUT
+
+          # Get the actions array from the session (not the whole session object)
+          CURRENT_ACTIONS=$(cat "$STATE_FILE" | jq -c ".sessions[\"$SESSION_KEY\"].actions // {\"actions\":[]}")
+
+          echo "state<<EOF" >> $GITHUB_OUTPUT
+          echo "$CURRENT_ACTIONS" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
           echo "session_key=$SESSION_KEY" >> $GITHUB_OUTPUT
 
       - name: Extract transcript (paste command only)
@@ -83,66 +94,54 @@ jobs:
           COMMENT_BODY: ${{ github.event.comment.body }}
         run: |
           # Extract transcript from comment
-          # Looks for content after /meeting-ai paste or between ```
-          transcript=$(echo "$COMMENT_BODY" | sed -n '/```/,/```/p' | tail -n +2 | head -n -1)
+          # Looks for content between ``` markers or after the command
 
-          # If no code block, take everything after the command
+          # Try to extract from code block first
+          transcript=$(echo "$COMMENT_BODY" | sed -n '/^```/,/^```$/p' | sed '1d;$d')
+
+          # If no code block, take everything after /meeting-ai paste
           if [ -z "$transcript" ]; then
-            transcript=$(echo "$COMMENT_BODY" | sed 's/\/meeting-ai\s\+paste\s\+//I' | sed 's/^\s*\n//')
+            transcript=$(echo "$COMMENT_BODY" | sed 's/^.*\/meeting-ai[[:space:]]*paste[[:space:]]*//')
           fi
 
-          # Save to temp file
+          # Save to temp file for the AI step
           echo "$transcript" > /tmp/transcript.txt
           echo "has_transcript=true" >> $GITHUB_OUTPUT
 
       - name: Gather repository context
         id: context
+        if: steps.check.outputs.command == 'paste' || steps.check.outputs.command == 'feedback'
         env:
           GH_TOKEN: ${{ github.token }}
           REPO: ${{ github.repository }}
         run: |
-          echo "=== Gathering repository context for smart matching ==="
+          echo "=== Gathering repository context ==="
 
-          # Get all open issues with full details
-          echo "all_issues=$(gh issue list \
-            --state open \
-            --limit 100 \
-            --json number,title,body,state,url,labels,assignees,author,milestone \
-            --jq '.')" >> $GITHUB_OUTPUT
+          # Get all open issues (store in file to handle large output)
+          gh issue list --state open --limit 50 --json number,title,labels,assignees,milestone > /tmp/issues.json
 
-          # Get all open PRs with full details
-          echo "all_prs=$(gh pr list \
-            --state open \
-            --limit 100 \
-            --json number,title,body,state,url,headRefName,author,reviewers,baseRefName \
-            --jq '.')" >> $GITHUB_OUTPUT
+          # Get all open PRs
+          gh pr list --state open --limit 50 --json number,title,author,headRefName > /tmp/prs.json
 
           # Get CODEOWNERS if exists
-          echo "codeowners=$(cat $(find . -name "CODEOWNERS" -o -name ".github/CODEOWNERS" -o -name "docs/CODEOWNERS" 2>/dev/null | head -1) 2>/dev/null || echo "")" >> $GITHUB_OUTPUT
+          for path in "CODEOWNERS" ".github/CODEOWNERS" "docs/CODEOWNERS"; do
+            if [ -f "$path" ]; then
+              cat "$path" > /tmp/codeowners.txt
+              break
+            fi
+          done
+          [ ! -f /tmp/codeowners.txt ] && echo "" > /tmp/codeowners.txt
 
-          # Get recent contributors (last 50 commits)
-          echo "recent_contributors=$(git log --pretty=format:'%an <%ae>' -50 | sort -u | head -20)" >> $GITHUB_OUTPUT
+          # Get recent contributors
+          git log --pretty=format:'%an' -50 2>/dev/null | sort -u | head -20 > /tmp/contributors.txt
 
           # Get all available labels
-          echo "all_labels=$(gh label list \
-            --limit 100 \
-            --json name,color,description \
-            --jq '.')" >> $GITHUB_OUTPUT
+          gh label list --limit 100 --json name > /tmp/labels.json
 
           # Get milestones
-          echo "milestones=$(gh api \
-            repos/$REPO/milestones \
-            --state open \
-            --jq '.')" >> $GITHUB_OUTPUT
+          gh api "repos/$REPO/milestones?state=open" > /tmp/milestones.json 2>/dev/null || echo '[]' > /tmp/milestones.json
 
-          # Get repository teams (if org repo)
-          echo "teams=$(gh api \
-            repos/$REPO/teams \
-            -H "Accept: application/vnd.github+json" \
-            --jq '. // []' 2>/dev/null || echo '[]')" >> $GITHUB_OUTPUT
-
-          # Get custom fields/properties (GitHub Projects)
-          echo "=== Context gathering complete ==="
+          echo "context_ready=true" >> $GITHUB_OUTPUT
 
       - name: Process meeting transcript
         id: process
@@ -154,127 +153,66 @@ jobs:
           model: zai/glm-4.7
           agent: orchestrator
           prompt: |
-            You are Meeting AI - an intelligent assistant that analyzes meeting transcripts and takes smart actions on GitHub issues and PRs.
+            You are Meeting AI - an intelligent assistant that analyzes meeting transcripts and proposes GitHub actions.
 
-            {% if steps.check.outputs.command == 'paste' %}
+            ## Command: ${{ steps.check.outputs.command }}
+
             ## Meeting Transcript
-            {{ cat /tmp/transcript.txt }}
-            {% endif %}
+            $(cat /tmp/transcript.txt 2>/dev/null || echo "No transcript available")
 
-            {% if steps.check.outputs.command == 'feedback' %}
-            ## Previous Proposed Actions
-            {{ steps.load_state.outputs.state | toJSON }}
+            ## Previous State (for feedback command)
+            ${{ steps.load_state.outputs.state }}
 
-            ## User Feedback
-            {{ github.event.comment.body }}
+            ## User Feedback (for feedback command)
+            ${{ github.event.comment.body }}
 
-            Please revise the proposed actions based on the feedback.
-            {% endif %}
-
-            ## Repository Context for Smart Matching
+            ## Repository Context
 
             ### Open Issues
-            {{ steps.context.outputs.all_issues }}
+            $(cat /tmp/issues.json 2>/dev/null || echo "[]")
 
             ### Open Pull Requests
-            {{ steps.context.outputs.all_prs }}
+            $(cat /tmp/prs.json 2>/dev/null || echo "[]")
 
-            ### CODEOWNERS File
-            {{ steps.context.outputs.codeowners }}
+            ### CODEOWNERS
+            $(cat /tmp/codeowners.txt 2>/dev/null || echo "")
 
             ### Recent Contributors
-            {{ steps.context.outputs.recent_contributors }}
+            $(cat /tmp/contributors.txt 2>/dev/null || echo "")
 
             ### Available Labels
-            {{ steps.context.outputs.all_labels }}
+            $(cat /tmp/labels.json 2>/dev/null || echo "[]")
 
-            ### Available Milestones
-            {{ steps.context.outputs.milestones }}
-
-            ### Repository Teams
-            {{ steps.context.outputs.teams }}
+            ### Milestones
+            $(cat /tmp/milestones.json 2>/dev/null || echo "[]")
 
             ## Instructions
 
-            You are tasked with intelligently extracting action items from the meeting and matching them to the right GitHub issues/PRs with the right people.
+            Extract action items from the meeting and match them to GitHub issues/PRs.
 
-            ### Step 1: Extract Action Items
-            Identify tasks discussed in the meeting that require GitHub actions. Look for:
-            - Work completed (should close issues)
-            - Work needing more context (should add comments)
-            - New tasks discovered (should create issues)
-            - Priority changes (should update labels/milestones)
-            - Assignment changes (should reassign)
+            ### Action Types
+            - close_issue: Close completed issues
+            - reopen_issue: Reopen issues needing more work
+            - add_comment: Add meeting context to issues
+            - update_labels: Change issue labels
+            - set_milestone: Update milestones
+            - create_issue: Create new issues from discussion
+            - assign_user: Assign/reassign issues
+            - request_review: Request PR reviews
+            - merge_pr: Merge approved PRs
+            - close_pr: Close PRs
 
-            ### Step 2: Smart Issue/PR Matching
-            For each action item, find the BEST matching issue or PR using:
-            - **Semantic similarity**: Match keywords, topics, component names
-            - **Author mentions**: If someone is mentioned, check their issues
-            - **Label patterns**: Bug reports, features, docs, etc.
-            - **Milestone alignment**: Same sprint/release
+            ### Output Format
 
-            If NO good match exists (confidence < 70%), mark as "new" for creation.
+            Return ONLY valid JSON (no markdown, no explanation):
 
-            ### Step 3: Smart People Detection
-            Identify the RIGHT people to assign using:
-            - **Direct mentions** in the transcript
-            - **CODEOWNERS file** for the affected files/paths
-            - **Previous assignees** of similar issues
-            - **Recent contributors** to relevant code areas
-            - **Team membership** if team-specific work
+            {"actions":[{"id":"action-1","type":"close_issue","target":"#123","title":"Close bug fix issue","reasoning":"Bug was fixed per discussion","confidence":"high","details":{"comment":"Closing as discussed","labels":[],"assignees":[]}}]}
 
-            Extract GitHub usernames carefully. Format: @username or just "username"
-
-            ### Step 4: Custom Fields & Properties
-            Suggest appropriate:
-            - **Labels**: Use existing labels from the repository (match by category)
-            - **Milestones**: Assign to appropriate milestone from available options
-            - **Projects**: Suggest project board placement if applicable
-            - **Priority**: Add priority labels if they exist (critical/high/medium/low)
-
-            ### Step 5: Generate JSON Output
-
-            Create a JSON array with this exact structure:
-            ```json
-            {
-              "actions": [
-                {
-                  "id": "action-1",
-                  "type": "close_issue|reopen_issue|add_comment|update_labels|set_milestone|create_issue|assign_user|close_pr|update_project",
-                  "target": "#123 or 'new' (issue/PR number or 'new' for creation)",
-                  "target_reasoning": "Why this issue/PR matches the discussion",
-                  "title": "Brief description of what will be done",
-                  "reasoning": "Why this action is needed based on the meeting",
-                  "confidence": "high|medium|low (how confident are you in this match)",
-                  "people_reasoning": "Why these people are assigned (CODEOWNERS, mentions, etc.)",
-                  "details": {
-                    "comment": "Full text to add (for add_comment)",
-                    "labels": ["bug", "high-priority"],
-                    "labels_to_remove": ["needs-review"],
-                    "milestone": "v2.0",
-                    "assignees": ["username1", "username2"],
-                    "reviewers": ["username1"],
-                    "new_title": "Title for new issue",
-                    "new_body": "Full body for new issue with context from meeting",
-                    "project": "Project Board Name",
-                    "status": "In Progress",
-                    "priority": "high"
-                  }
-                }
-              ]
-            }
-            ```
-
-            ### Important Rules:
-            1. ALWAYS use existing labels from the repository - don't invent new ones
-            2. For new issues, include full context from the meeting in the body
-            3. Mention people discussed in the meeting using @username
-            4. If confidence is "low", explain why in the reasoning
-            5. Extract GitHub usernames carefully - they must be valid GitHub usernames
-            6. Use CODEOWNERS to determine file path ownership when mentioned
-
-            CRITICAL: Your final response must contain ONLY the JSON between ```json and ``` markers.
-            Do not include any explanatory text outside the JSON block.
+            Rules:
+            1. Use ONLY existing labels from the repository
+            2. confidence must be: high, medium, or low
+            3. target is issue/PR number like "#123" or "new" for create_issue
+            4. Return raw JSON only, no code blocks
 
       - name: Parse and save state
         id: save_state
@@ -283,83 +221,64 @@ jobs:
           SESSION_KEY: ${{ steps.load_state.outputs.session_key }}
           AI_OUTPUT: ${{ steps.process.outputs.output }}
         run: |
-          # Extract JSON from AI output
-          actions_json=$(echo "$AI_OUTPUT" | grep -oP '(?<=```json\n).*(?=\n```)' | head -1 || echo "$AI_OUTPUT" | grep -oP '\{.*\}' | head -1)
+          STATE_FILE=".github/meeting-ai-state.json"
+
+          # Try to extract JSON from AI output
+          # First try to find JSON object directly
+          actions_json=$(echo "$AI_OUTPUT" | grep -o '{.*}' | head -1)
+
+          # If that fails, try to extract from code blocks
+          if [ -z "$actions_json" ] || ! echo "$actions_json" | jq empty 2>/dev/null; then
+            # Extract content between ```json and ```
+            actions_json=$(echo "$AI_OUTPUT" | sed -n '/```json/,/```/p' | sed '1d;$d' | tr -d '\n')
+          fi
+
+          # Final fallback - try the whole output
+          if [ -z "$actions_json" ] || ! echo "$actions_json" | jq empty 2>/dev/null; then
+            actions_json="$AI_OUTPUT"
+          fi
 
           # Validate JSON
           if ! echo "$actions_json" | jq empty 2>/dev/null; then
-            echo "Failed to parse AI output as JSON"
-            echo "$AI_OUTPUT"
-            exit 1
+            echo "::error::Failed to parse AI output as JSON"
+            echo "Raw output: $AI_OUTPUT"
+            # Create empty actions as fallback
+            actions_json='{"actions":[]}'
+          fi
+
+          # Ensure actions_json has the right structure
+          if ! echo "$actions_json" | jq -e '.actions' >/dev/null 2>&1; then
+            actions_json='{"actions":[]}'
           fi
 
           # Update state file
-          STATE_FILE=".github/meeting-ai-state.json"
-          temp=$(mktemp)
-
-          # Get current timestamp
           timestamp=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
 
-          # Build new state
-          cat "$STATE_FILE" | jq \
-            --arg key "$SESSION_KEY" \
-            --argjson actions "$actions_json" \
-            --arg timestamp "$timestamp" \
-            '.sessions[$key] = {actions: $actions, created_at: $timestamp, status: "pending_approval"}' > "$temp"
+          jq --arg key "$SESSION_KEY" \
+             --argjson actions "$actions_json" \
+             --arg timestamp "$timestamp" \
+             '.sessions[$key] = {actions: $actions, created_at: $timestamp, status: "pending_approval"}' \
+             "$STATE_FILE" > "${STATE_FILE}.tmp" && mv "${STATE_FILE}.tmp" "$STATE_FILE"
 
-          mv "$temp" "$STATE_FILE"
+          # Save actions for next step
+          echo "actions_json<<EOF" >> $GITHUB_OUTPUT
+          echo "$actions_json" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
 
-          # Output for next step
-          echo "actions_json=$actions_json" >> $GITHUB_OUTPUT
-
-      - name: Format action table
-        id: format_table
+      - name: Format and post action table
         if: steps.check.outputs.command == 'paste' || steps.check.outputs.command == 'feedback'
         env:
+          GH_TOKEN: ${{ github.token }}
+          ISSUE_NUMBER: ${{ steps.check.outputs.issue_number }}
           ACTIONS_JSON: ${{ steps.save_state.outputs.actions_json }}
         run: |
-          # Generate markdown table from JSON
-          cat > /tmp/table.md << 'EOF'
-            <!-- meeting-ai-actions-start -->
-            ## 📋 Proposed Actions from Meeting
+          # Build markdown table
+          TABLE="## 📋 Proposed Actions from Meeting\n\n"
+          TABLE+="| # | Action | Target | Confidence | Details |\n"
+          TABLE+="|---|--------|--------|------------|--------|\n"
 
-            | # | Action | Target | Confidence | People | Details | Reasoning |
-            |---|--------|--------|------------|--------|---------|-----------|
-          EOF
-
-          echo "$ACTIONS_JSON" | jq -r '.actions[] | @json' | while IFS= read -r action; do
-            id=$(echo "$action" | jq -r '.id')
-            type=$(echo "$action" | jq -r '.type')
-            target=$(echo "$action" | jq -r '.target')
-            confidence=$(echo "$action" | jq -r '.confidence // "medium"')
-            people=$(echo "$action" | jq -r '.details.assignees // [] | join(", ")' | head -c 20)
-            reasoning=$(echo "$action" | jq -r '.reasoning // ""' | head -c 40)
-
-            # Format details based on type
-            case "$type" in
-              add_comment)
-                details=$(echo "$action" | jq -r '.details.comment' | head -c 25)...
-                ;;
-              update_labels)
-                details="Labels: $(echo "$action" | jq -r '.details.labels // [] | join(", ")')"
-                ;;
-              set_milestone)
-                details="Milestone: $(echo "$action" | jq -r '.details.milestone')"
-                ;;
-              create_issue)
-                details="New: $(echo "$action" | jq -r '.details.new_title' | head -c 20)..."
-                ;;
-              assign_user)
-                details="To: $(echo "$action" | jq -r '.details.assignees // [] | join(", ")')"
-                ;;
-              update_project)
-                details="Project: $(echo "$action" | jq -r '.details.project // ""')"
-                ;;
-              *)
-                details="-"
-                ;;
-            esac
-
+          # Parse actions and build table rows
+          echo "$ACTIONS_JSON" | jq -r '.actions[] | "\(.id)|\(.type)|\(.target)|\(.confidence)|\(.title // .reasoning | .[0:50])"' | while IFS='|' read -r id type target confidence details; do
             # Confidence badge
             case "$confidence" in
               high) badge="🟢" ;;
@@ -367,169 +286,127 @@ jobs:
               low) badge="🔴" ;;
               *) badge="⚪" ;;
             esac
-
-            echo "| $id | $type | $target | $badge $confidence | $people | $details | $reasoning... |" >> /tmp/table.md
+            TABLE+="| $id | $type | $target | $badge $confidence | $details |\n"
           done
 
-          cat >> /tmp/table.md << 'EOF'
+          TABLE+="\n---\n"
+          TABLE+="### Legend\n"
+          TABLE+="- 🟢 High confidence | 🟡 Medium confidence | 🔴 Low confidence\n\n"
+          TABLE+="### Next Steps\n"
+          TABLE+="- **Feedback:** \`/meeting-ai feedback <your feedback>\`\n"
+          TABLE+="- **Approve:** \`/meeting-ai approve\`\n"
 
-            ---
-            ### Legend
-            - 🟢 High confidence: Strong match found
-            - 🟡 Medium confidence: Likely match
-            - 🔴 Low confidence: Please verify before approving
-
-            ### Next Steps
-            - **To provide feedback:** Comment `/meeting-ai feedback <your feedback>`
-            - **To approve and execute:** Comment `/meeting-ai approve`
-            <!-- meeting-ai-actions-end -->
-          EOF
-
-          echo "table=$(cat /tmp/table.md)" >> $GITHUB_OUTPUT
-
-      - name: Post actions table
-        if: steps.check.outputs.command == 'paste' || steps.check.outputs.command == 'feedback'
-        env:
-          GH_TOKEN: ${{ github.token }}
-          ISSUE_NUMBER: ${{ steps.check.outputs.issue_number }}
-          TABLE: ${{ steps.format_table.outputs.table }}
-        run: |
-          # Post the table as a comment
-          gh issue comment "$ISSUE_NUMBER" --body "$TABLE"
+          # Post comment
+          echo -e "$TABLE" | gh issue comment "$ISSUE_NUMBER" --body-file -
 
       - name: Execute approved actions
-        id: execute
         if: steps.check.outputs.command == 'approve'
         env:
           GH_TOKEN: ${{ github.token }}
           SESSION_KEY: ${{ steps.load_state.outputs.session_key }}
-          ACTIONS_JSON: ${{ steps.load_state.outputs.state }}
+          STATE_JSON: ${{ steps.load_state.outputs.state }}
+          ISSUE_NUMBER: ${{ steps.check.outputs.issue_number }}
         run: |
-          # Get actions from state
-          actions=$(echo "$ACTIONS_JSON" | jq -r '.actions // empty')
+          STATE_FILE=".github/meeting-ai-state.json"
 
-          if [ -z "$actions" ] || [ "$actions" = "null" ]; then
-            echo "No pending actions found. Please paste a meeting transcript first."
-            gh issue comment "${{ steps.check.outputs.issue_number }}" --body "❌ No pending actions found. Please use `/meeting-ai paste <transcript>` first."
-            exit 1
+          # Get actions from state
+          actions=$(echo "$STATE_JSON" | jq -r '.actions // []')
+
+          if [ "$actions" = "[]" ] || [ -z "$actions" ]; then
+            gh issue comment "$ISSUE_NUMBER" --body "❌ No pending actions found. Use \`/meeting-ai paste <transcript>\` first."
+            exit 0
           fi
 
-          echo "Executing actions..."
-          results=()
+          # Track results
+          RESULTS_FILE=$(mktemp)
+          echo "## ✅ Meeting AI Actions Executed" > "$RESULTS_FILE"
+          echo "" >> "$RESULTS_FILE"
 
-          echo "$actions" | jq -r '.[] | @json' | while IFS= read -r action; do
+          # Process each action
+          echo "$actions" | jq -c '.[]' | while read -r action; do
             id=$(echo "$action" | jq -r '.id')
             type=$(echo "$action" | jq -r '.type')
-            target=$(echo "$action" | jq -r '.target')
-            details=$(echo "$action" | jq -r '.details')
+            target=$(echo "$action" | jq -r '.target' | tr -d '#')
 
             case "$type" in
               close_issue)
-                number=$(echo "$target" | tr -d '#')
-                gh issue close "$number" --comment "✅ Closed via Meeting AI after team discussion"
-                results+=("✅ Closed issue #$number")
+                if gh issue close "$target" --comment "✅ Closed via Meeting AI"; then
+                  echo "- ✅ Closed issue #$target" >> "$RESULTS_FILE"
+                fi
                 ;;
               reopen_issue)
-                number=$(echo "$target" | tr -d '#')
-                gh issue reopen "$number" --comment "🔄 Reopened via Meeting AI after team discussion"
-                results+=("🔄 Reopened issue #$number")
+                if gh issue reopen "$target" --comment "🔄 Reopened via Meeting AI"; then
+                  echo "- 🔄 Reopened issue #$target" >> "$RESULTS_FILE"
+                fi
                 ;;
               add_comment)
-                number=$(echo "$target" | tr -d '#')
-                comment=$(echo "$details" | jq -r '.comment')
-                gh issue comment "$number" --body "📅 **Meeting Update:**\n\n$comment\n\n---\n*Via Meeting AI*"
-                results+=("💬 Added comment to #$number")
+                comment=$(echo "$action" | jq -r '.details.comment // "Meeting update"')
+                if gh issue comment "$target" --body "📅 **Meeting Update:**\n\n$comment"; then
+                  echo "- 💬 Commented on #$target" >> "$RESULTS_FILE"
+                fi
                 ;;
               update_labels)
-                number=$(echo "$target" | tr -d '#')
-                labels=$(echo "$details" | jq -r '.labels // [] | join(",")')
-                labels_remove=$(echo "$details" | jq -r '.labels_to_remove // [] | join(",")')
-                if [ -n "$labels_remove" ]; then
-                  gh issue edit "$number" --remove-labels "$labels_remove"
-                  results+=("🏷️ Removed labels from #$number: $labels_remove")
-                fi
+                labels=$(echo "$action" | jq -r '.details.labels // [] | join(",")')
                 if [ -n "$labels" ]; then
-                  gh issue edit "$number" --add-labels "$labels"
-                  results+=("🏷️ Added labels to #$number: $labels")
+                  gh issue edit "$target" --add-label "$labels" && echo "- 🏷️ Labels updated on #$target" >> "$RESULTS_FILE"
                 fi
                 ;;
               set_milestone)
-                number=$(echo "$target" | tr -d '#')
-                milestone=$(echo "$details" | jq -r '.milestone')
-                gh issue edit "$number" --milestone "$milestone"
-                results+=("📊 Set milestone on #$number: $milestone")
+                milestone=$(echo "$action" | jq -r '.details.milestone')
+                if [ -n "$milestone" ] && [ "$milestone" != "null" ]; then
+                  gh issue edit "$target" --milestone "$milestone" && echo "- 📊 Milestone set on #$target" >> "$RESULTS_FILE"
+                fi
                 ;;
               create_issue)
-                title=$(echo "$details" | jq -r '.new_title')
-                body=$(echo "$details" | jq -r '.new_body')
-                labels=$(echo "$details" | jq -r '.labels // [] | join(",")')
-                assignees=$(echo "$details" | jq -r '.assignees // [] | join(",")')
-                milestone=$(echo "$details" | jq -r '.milestone // ""')
-
-                # Build create command
-                create_cmd="gh issue create --title \"$title\" --body \"$body\""
-                [ -n "$labels" ] && create_cmd="$create_cmd --label \"$labels\""
-                [ -n "$assignees" ] && create_cmd="$create_cmd --assignee \"$assignees\""
-                [ -n "$milestone" ] && create_cmd="$create_cmd --milestone \"$milestone\""
-
-                new_url=$(eval "$create_cmd" --json url --jq .url)
-                results+=("✨ Created issue: $new_url")
+                title=$(echo "$action" | jq -r '.details.new_title // .title')
+                body=$(echo "$action" | jq -r '.details.new_body // .reasoning')
+                new_url=$(gh issue create --title "$title" --body "$body" 2>/dev/null)
+                if [ -n "$new_url" ]; then
+                  echo "- ✨ Created: $new_url" >> "$RESULTS_FILE"
+                fi
                 ;;
               assign_user)
-                number=$(echo "$target" | tr -d '#')
-                assignees=$(echo "$details" | jq -r '.assignees | join(",")')
-                gh issue edit "$number" --add-assignee "$assignees"
-                results+=("👤 Assigned #$number to: $assignees")
+                assignees=$(echo "$action" | jq -r '.details.assignees // [] | join(",")')
+                if [ -n "$assignees" ]; then
+                  gh issue edit "$target" --add-assignee "$assignees" && echo "- 👤 Assigned #$target to $assignees" >> "$RESULTS_FILE"
+                fi
                 ;;
               request_review)
-                number=$(echo "$target" | tr -d '#')
-                reviewers=$(echo "$details" | jq -r '.reviewers | join(",")')
-                gh pr edit "$number" --add-reviewer "$reviewers"
-                results+=("👀 Requested review on PR #$number from: $reviewers")
-                ;;
-              close_pr)
-                number=$(echo "$target" | tr -d '#')
-                gh pr close "$number" --comment "✅ Closed via Meeting AI after team discussion"
-                results+=("✅ Closed PR #$number")
+                reviewers=$(echo "$action" | jq -r '.details.reviewers // [] | join(",")')
+                if [ -n "$reviewers" ]; then
+                  gh pr edit "$target" --add-reviewer "$reviewers" && echo "- 👀 Review requested on PR #$target" >> "$RESULTS_FILE"
+                fi
                 ;;
               merge_pr)
-                number=$(echo "$target" | tr -d '#')
-                merge_method=$(echo "$details" | jq -r '.merge_method // "merge"')
-                gh pr merge "$number" --"$merge_method" --subject "Merged via Meeting AI" --body "Auto-merged after team discussion"
-                results+=("🔀 Merged PR #$number")
+                if gh pr merge "$target" --merge --body "Merged via Meeting AI"; then
+                  echo "- 🔀 Merged PR #$target" >> "$RESULTS_FILE"
+                fi
                 ;;
-              update_project)
-                # Note: Project updates require project ID and item ID
-                # This is a placeholder for future implementation with GitHub Projects API
-                results+=("📋 Project update requested: $(echo "$details" | jq -r '.project')")
+              close_pr)
+                if gh pr close "$target" --comment "Closed via Meeting AI"; then
+                  echo "- ✅ Closed PR #$target" >> "$RESULTS_FILE"
+                fi
                 ;;
             esac
           done
 
-          # Clear the state after execution
-          STATE_FILE=".github/meeting-ai-state.json"
-          temp=$(mktemp)
-          cat "$STATE_FILE" | jq --arg key "$SESSION_KEY" 'del(.sessions[$key])' > "$temp"
-          mv "$temp" "$STATE_FILE"
+          # Clear session state
+          jq --arg key "$SESSION_KEY" 'del(.sessions[$key])' "$STATE_FILE" > "${STATE_FILE}.tmp" && mv "${STATE_FILE}.tmp" "$STATE_FILE"
 
           # Post results
-          result_text="## ✅ Meeting AI Actions Executed\n\n"
-          for r in "${results[@]}"; do
-            result_text+="$r\n"
-          done
-          result_text+="\n---\n*All actions completed successfully*"
-
-          gh issue comment "${{ steps.check.outputs.issue_number }}" --body "$result_text"
+          gh issue comment "$ISSUE_NUMBER" --body-file "$RESULTS_FILE"
+          rm -f "$RESULTS_FILE"
 
       - name: Commit state changes
-        if: always()
-        env:
-          GH_TOKEN: ${{ github.token }}
+        if: always() && steps.check.outputs.command != ''
         run: |
-          if [ -f ".github/meeting-ai-state.json" ]; then
+          STATE_FILE=".github/meeting-ai-state.json"
+          if [ -f "$STATE_FILE" ]; then
             git config user.name "github-actions[bot]"
             git config user.email "github-actions[bot]@users.noreply.github.com"
-            git add .github/meeting-ai-state.json
-            git diff --staged --quiet || git commit -m "Update meeting-ai state [skip ci]"
-            git push
+            git add "$STATE_FILE"
+            if ! git diff --staged --quiet; then
+              git commit -m "chore: update meeting-ai state [skip ci]"
+              git push || echo "::warning::Failed to push state changes"
+            fi
           fi
