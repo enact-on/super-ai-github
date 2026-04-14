@@ -134,21 +134,26 @@ jobs:
           # Log the base URL (without exposing the key)
           echo "Using API endpoint: $BASE_URL"
 
+          # Create a temporary file for the request body
+          cat > /tmp/request.json << EOF
+{
+              "model": "claude-sonnet-4-20250514",
+              "max_tokens": 4096,
+              "messages": [
+                  {
+                      "role": "user",
+                      "content": $(echo "$PROMPT" | jq -Rs .)
+                  }
+              ]
+          }
+EOF
+
           # Make API call
           RESPONSE=$(curl -s -w "\n%{http_code}" -X POST "$BASE_URL/v1/messages" \
             -H "x-api-key: $ANTHROPIC_API_KEY" \
             -H "anthropic-version: 2023-06-01" \
             -H "content-type: application/json" \
-            -d '{
-              "model": "claude-sonnet-4-20250514",
-              "max_tokens": 4096,
-              "messages": [
-                {
-                  "role": "user",
-                  "content": "'"$(echo "$PROMPT" | jq -Rs .)"'"
-                }
-              ]
-            }')
+            -d @/tmp/request.json)
 
           # Separate response body and HTTP status code
           HTTP_STATUS=$(echo "$RESPONSE" | tail -n1)

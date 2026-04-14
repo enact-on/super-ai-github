@@ -107,28 +107,48 @@ jobs:
           "
 
           # Call Anthropic API
+          # Call Anthropic API
           BASE_URL="${ANTHROPIC_BASE_URL:-https://api.anthropic.com}"
 
-          RESPONSE=$(curl -s -X POST "$BASE_URL/v1/messages" \
-            -H "x-api-key: $ANTHROPIC_API_KEY" \
-            -H "anthropic-version: 2023-06-01" \
-            -H "content-type: application/json" \
-            -d '{
+          # Create a temporary file for the request body
+          cat > /tmp/request.json << EOF
+          {
               "model": "claude-sonnet-4-20250514",
               "max_tokens": 2048,
               "messages": [
-                {
-                  "role": "user",
-                  "content": "'"$(echo "$PROMPT" | jq -Rs .)"'"
-                }
+                  {
+                      "role": "user",
+                      "content": $(echo "$PROMPT" | jq -Rs .)
+                  }
               ]
-            }')
+          }
+          EOF
+
+          RESPONSE=$(curl -s -w "\n%{http_code}" -X POST "$BASE_URL/v1/messages" \
+            -H "x-api-key: $ANTHROPIC_API_KEY" \
+            -H "anthropic-version: 2023-06-01" \
+            -H "content-type: application/json" \
+            -d @/tmp/request.json)
+
+          # Separate response body and HTTP status code
+          HTTP_STATUS=$(echo "$RESPONSE" | tail -n1)
+          RESPONSE_BODY=$(echo "$RESPONSE" | head -n-1)
+
+          echo "HTTP Status: $HTTP_STATUS"
+
+          # Check if request was successful
+          if [ "$HTTP_STATUS" != "200" ]; then
+            echo "❌ API request failed with status $HTTP_STATUS"
+            echo "Error response: $RESPONSE_BODY"
+            echo "$RESPONSE_BODY" > triage-output.md
+            exit 1
+          fi
 
           # Extract and save the response
-          echo "$RESPONSE" > triage-response.json
+          echo "$RESPONSE_BODY" > triage-response.json
 
           # Extract the text content
-          TRIAGE_TEXT=$(echo "$RESPONSE" | jq -r '.content[0].text')
+          TRIAGE_TEXT=$(echo "$RESPONSE_BODY" | jq -r '.content[0].text // empty')
           echo "$TRIAGE_TEXT" > triage-output.md
 
       - name: Parse triage results

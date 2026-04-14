@@ -100,23 +100,49 @@ jobs:
           # Call Anthropic API
           BASE_URL="${ANTHROPIC_BASE_URL:-https://api.anthropic.com}"
 
-          RESPONSE=$(curl -s -X POST "$BASE_URL/v1/messages" \
-            -H "x-api-key: $ANTHROPIC_API_KEY" \
-            -H "anthropic-version: 2023-06-01" \
-            -H "content-type: application/json" \
-            -d '{
+          # Create a temporary file for the request body
+          cat > /tmp/request.json << EOF
+          {
               "model": "claude-sonnet-4-20250514",
               "max_tokens": 8192,
               "messages": [
-                {
-                  "role": "user",
-                  "content": "'"$(echo "$PROMPT" | jq -Rs .)"'"
-                }
+                  {
+                      "role": "user",
+                      "content": $(echo "$PROMPT" | jq -Rs .)
+                  }
               ]
-            }')
+          }
+          EOF
+
+          RESPONSE=$(curl -s -w "\n%{http_code}" -X POST "$BASE_URL/v1/messages" \
+            -H "x-api-key: $ANTHROPIC_API_KEY" \
+            -H "anthropic-version: 2023-06-01" \
+            -H "content-type: application/json" \
+            -d @/tmp/request.json)
+
+          # Separate response body and HTTP status code
+          HTTP_STATUS=$(echo "$RESPONSE" | tail -n1)
+          RESPONSE_BODY=$(echo "$RESPONSE" | head -n-1)
+
+          echo "HTTP Status: $HTTP_STATUS"
+
+          # Check if request was successful
+          if [ "$HTTP_STATUS" != "200" ]; then
+            echo "❌ API request failed with status $HTTP_STATUS"
+            echo "Error response: $RESPONSE_BODY"
+            echo "$RESPONSE_BODY" > security-audit.md
+            exit 1
+          fi
 
           # Extract the response text
-          AUDIT_TEXT=$(echo "$RESPONSE" | jq -r '.content[0].text')
+          AUDIT_TEXT=$(echo "$RESPONSE_BODY" | jq -r '.content[0].text // empty')
+
+          # Check if extraction was successful
+          if [ -z "$AUDIT_TEXT" ] || [ "$AUDIT_TEXT" = "null" ]; then
+            echo "❌ Failed to extract response text"
+            echo "Full response: $RESPONSE_BODY"
+            AUDIT_TEXT="❌ **Error:** Unable to complete security audit. Please check the workflow logs for details."
+          fi
 
           # Save to file
           echo "$AUDIT_TEXT" > security-audit.md
