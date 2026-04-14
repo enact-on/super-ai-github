@@ -103,21 +103,15 @@ jobs:
           CONTEXT_BODY: ${{ steps.context.outputs.body }}
           TECH_STACK: ${{ steps.detect.outputs.tech_stack }}
         run: |
-          # Read the orchestrator agent
-          ORCHESTRATOR_PROMPT=""
-          if [ -f ".claude-agents/agents/orchestrator.md" ]; then
-            ORCHESTRATOR_PROMPT=$(cat .claude-agents/agents/orchestrator.md)
-          fi
-
           # Build the prompt based on command
           case "$COMMAND" in
             *help*)
               PROMPT="Available SuperAI commands:
-              - /superai review - Review the code
-              - /superai explain - Explain how the code works
-              - /superai improve - Suggest improvements
-              - /superai test - Suggest tests to add
-              - /superai fix - Help fix a problem"
+              - /superai review this - Review the code
+              - /superai explain this - Explain how the code works
+              - /superai improve this - Suggest improvements
+              - /superai implement this - Implement this feature/fix
+              - /superai test this - Suggest tests to add"
               ;;
             *review*)
               PROMPT="Review this $CONTEXT_TYPE titled '$CONTEXT_TITLE'.
@@ -126,10 +120,8 @@ jobs:
 
               Technology Stack: $TECH_STACK
 
-              $ORCHESTRATOR_PROMPT
-
               Please provide a code review covering:
-              1. Code quality and best practices
+              1. Code quality and best practices for $TECH_STACK
               2. Potential issues or bugs
               3. Security concerns
               4. Performance considerations
@@ -141,8 +133,6 @@ jobs:
               Description: $CONTEXT_BODY
 
               Technology Stack: $TECH_STACK
-
-              $ORCHESTRATOR_PROMPT
 
               Please explain:
               1. What this code/issue is about
@@ -157,8 +147,6 @@ jobs:
 
               Technology Stack: $TECH_STACK
 
-              $ORCHESTRATOR_PROMPT
-
               Please suggest:
               1. Code quality improvements
               2. Performance optimizations
@@ -166,14 +154,26 @@ jobs:
               4. Security enhancements
               5. Documentation improvements"
               ;;
+            *implement*)
+              PROMPT="Help implement this feature/fix: $CONTEXT_TITLE
+
+              Description: $CONTEXT_BODY
+
+              Technology Stack: $TECH_STACK
+
+              Please provide:
+              1. Implementation approach
+              2. Code structure suggestions
+              3. Step-by-step implementation plan
+              4. Best practices to follow
+              5. Testing recommendations"
+              ;;
             *test*)
               PROMPT="Suggest tests for this $CONTEXT_TYPE titled '$CONTEXT_TITLE'.
 
               Description: $CONTEXT_BODY
 
               Technology Stack: $TECH_STACK
-
-              $ORCHESTRATOR_PROMPT
 
               Please suggest:
               1. Unit tests to add
@@ -189,8 +189,6 @@ jobs:
               Command: $COMMAND
 
               Technology Stack: $TECH_STACK
-
-              $ORCHESTRATOR_PROMPT
 
               Please provide helpful assistance."
               ;;

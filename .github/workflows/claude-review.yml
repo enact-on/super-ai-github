@@ -24,11 +24,11 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
         run: |
-          # Get changed files
-          echo "changed_files=$(gh pr view $PR_NUMBER --json files --jq '.files[].path' | tr '\n' ' ')" >> $GITHUB_OUTPUT
+          # Get changed files (excluding agent files)
+          echo "changed_files=$(gh pr view $PR_NUMBER --json files --jq '.files[].path' | grep -v '.claude-agents' | grep -v '.super-ai-github' | tr '\n' ' ')" >> $GITHUB_OUTPUT
 
-          # Get PR diff
-          gh pr diff $PR_NUMBER > pr-diff.txt
+          # Get PR diff (excluding agent files)
+          gh pr diff $PR_NUMBER --exclude ".claude-agents*" --exclude ".super-ai-github*" > pr-diff.txt
 
           # Get PR title and body
           echo "pr_title=$(gh pr view $PR_NUMBER --json title --jq '.title')" >> $GITHUB_OUTPUT
@@ -77,29 +77,8 @@ jobs:
           CHANGED_FILES: ${{ steps.context.outputs.changed_files }}
           TECH_STACK: ${{ steps.detect.outputs.tech_stack }}
         run: |
-          # Read the orchestrator agent
-          ORCHESTRATOR_PROMPT=""
-          if [ -f ".claude-agents/agents/orchestrator.md" ]; then
-            ORCHESTRATOR_PROMPT=$(cat .claude-agents/agents/orchestrator.md)
-          fi
-
-          # Read the code reviewer agent
-          REVIEWER_PROMPT=""
-          if [ -f ".claude-agents/agents/code-reviewer.md" ]; then
-            REVIEWER_PROMPT=$(cat .claude-agents/agents/code-reviewer.md)
-          fi
-
-          # Read tech-specific skills if available
-          SKILLS_PROMPT=""
-          if [ -f ".claude-agents/skills/laravel/SKILL.md" ]; then
-            SKILLS_PROMPT="$SKILLS_PROMPT\n\n$(cat .claude-agents/skills/laravel/SKILL.md)"
-          fi
-
-          # Build the prompt
-          PROMPT="You are a code reviewer analyzing a Pull Request.
-
-          ## Technology Stack
-          $TECH_STACK
+          # Build the prompt - focusing ONLY on actual project code
+          PROMPT="You are a code reviewer analyzing a Pull Request for a $TECH_STACK project.
 
           ## PR Details
           - Title: $PR_TITLE
@@ -107,24 +86,22 @@ jobs:
           - Body: $PR_BODY
           - Changed Files: $CHANGED_FILES
 
-          ## Code Changes
+          ## Code Changes to Review
           $(cat pr-diff.txt)
-
-          $ORCHESTRATOR_PROMPT
-
-          $REVIEWER_PROMPT
-
-          $SKILLS_PROMPT
 
           Please provide a comprehensive code review covering:
           1. **Code Quality** - Readability, maintainability, naming conventions
           2. **Potential Issues** - Edge cases, null checks, performance issues
-          3. **Security** - Common vulnerabilities for $TECH_STACK
+          3. **Security** - Common vulnerabilities for $TECH_STACK projects
           4. **Testing** - Test coverage and quality
           5. **Documentation** - Comments and API docs
-          6. **Best Practices** - Framework-specific recommendations
+          6. **Best Practices** - Framework-specific recommendations for $TECH_STACK
 
-          Format your response as a GitHub comment with clear sections.
+          Focus ONLY on the actual code changes above.
+          Do NOT review configuration files, agent definitions, or workflow files.
+          Provide actionable feedback with specific examples.
+
+          Format your response as a GitHub comment with clear sections using ## headers.
           Keep it concise but actionable.
           "
 
