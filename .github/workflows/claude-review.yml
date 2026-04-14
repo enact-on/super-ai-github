@@ -131,12 +131,16 @@ jobs:
           # Call Anthropic API
           BASE_URL="${ANTHROPIC_BASE_URL:-https://api.anthropic.com}"
 
-          RESPONSE=$(curl -s -X POST "$BASE_URL/v1/messages" \
+          # Log the base URL (without exposing the key)
+          echo "Using API endpoint: $BASE_URL"
+
+          # Make API call
+          RESPONSE=$(curl -s -w "\n%{http_code}" -X POST "$BASE_URL/v1/messages" \
             -H "x-api-key: $ANTHROPIC_API_KEY" \
             -H "anthropic-version: 2023-06-01" \
             -H "content-type: application/json" \
             -d '{
-              "model": "claude-sonnet-4-6",
+              "model": "claude-sonnet-4-20250514",
               "max_tokens": 4096,
               "messages": [
                 {
@@ -146,8 +150,33 @@ jobs:
               ]
             }')
 
+          # Separate response body and HTTP status code
+          HTTP_STATUS=$(echo "$RESPONSE" | tail -n1)
+          RESPONSE_BODY=$(echo "$RESPONSE" | head -n-1)
+
+          echo "HTTP Status: $HTTP_STATUS"
+
+          # Check if request was successful
+          if [ "$HTTP_STATUS" != "200" ]; then
+            echo "❌ API request failed with status $HTTP_STATUS"
+            echo "Error response: $RESPONSE_BODY"
+            echo "$RESPONSE_BODY" > review-output.md
+            exit 1
+          fi
+
           # Extract the response text
-          REVIEW_TEXT=$(echo "$RESPONSE" | jq -r '.content[0].text')
+          REVIEW_TEXT=$(echo "$RESPONSE_BODY" | jq -r '.content[0].text // empty')
+
+          # Check if extraction was successful
+          if [ -z "$REVIEW_TEXT" ] || [ "$REVIEW_TEXT" = "null" ]; then
+            echo "❌ Failed to extract response text"
+            echo "Full response: $RESPONSE_BODY"
+            echo "API returned an unexpected response format. Please check:"
+            echo "1. ANTHROPIC_API_KEY is valid"
+            echo "2. ANTHROPIC_BASE_URL is correct (if using custom provider)"
+            echo "3. Model 'claude-sonnet-4-20250514' is available"
+            REVIEW_TEXT="❌ **Error:** Unable to get AI response. Please check the workflow logs for details."
+          fi
 
           # Save to file
           echo "$REVIEW_TEXT" > review-output.md
