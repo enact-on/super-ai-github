@@ -126,8 +126,25 @@ DETECTED_STACK=()
 if [ "$INSTALL_ALL" = false ] && [ -f "$SCRIPT_DIR/detect-tech-stack.sh" ]; then
     log_info "Detecting technology stack..."
     source "$SCRIPT_DIR/detect-tech-stack.sh"
-    detect_tech_stack "$PROJECT_ROOT"
+
+    # Always detect from the parent project, not the submodule
+    # Get the parent directory (where we should be running from)
+    PARENT_DIR="$PROJECT_ROOT"
+
+    # If we're in the submodule, go to parent
+    if [[ "$(pwd)" == *".super-ai-github"* ]] || [[ "$(pwd)" == *".super-ai-source"* ]]; then
+        PARENT_DIR="$(cd "$PROJECT_ROOT/.." && pwd)"
+        log_verbose "We're in submodule, checking parent: $PARENT_DIR"
+    fi
+
+    log_verbose "Detecting tech stack in: $PARENT_DIR"
+    detect_tech_stack "$PARENT_DIR"
     DETECTED_STACK=("${TECH_STACK[@]}")
+
+    # Debug: show what was detected
+    if [ ${#TECH_STACK[@]} -gt 0 ]; then
+        log_verbose "Technologies detected: ${TECH_STACK[*]}"
+    fi
 fi
 
 # Display detected tech stack

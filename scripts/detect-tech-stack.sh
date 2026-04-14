@@ -31,7 +31,8 @@ detect_tech_stack() {
         if grep -q '"svelte"' "$project_root/package.json" 2>/dev/null; then
             TECH_STACK+=("Svelte")
         fi
-        if grep -q '"next"' "$project_root/package.json" 2>/dev/null; then
+        # Check for Next.js more reliably
+        if [ -f "$project_root/next.config.js" ] || grep -q '"next"' "$project_root/package.json" 2>/dev/null; then
             TECH_STACK+=("Next.js")
         fi
         if grep -q '"nuxt"' "$project_root/package.json" 2>/dev/null; then
@@ -40,11 +41,23 @@ detect_tech_stack() {
         if grep -q '"@vitejs"' "$project_root/package.json" 2>/dev/null; then
             TECH_STACK+=("Vite")
         fi
+        # Check for Vite more reliably
+        if [ -f "$project_root/vite.config.js" ] || [ -f "$project_root/vite.config.ts" ]; then
+            TECH_STACK+=("Vite")
+        fi
         if grep -q '"webpack"' "$project_root/package.json" 2>/dev/null; then
             TECH_STACK+=("Webpack")
         fi
         if grep -q '"typescript"' "$project_root/package.json" 2>/dev/null; then
             TECH_STACK+=("TypeScript")
+        fi
+        # Alpine.js detection
+        if grep -q '"alpinejs"' "$project_root/package.json" 2>/dev/null; then
+            TECH_STACK+=("Alpine.js")
+        fi
+        # Tailwind CSS detection
+        if grep -q '"tailwindcss"' "$project_root/package.json" 2>/dev/null; then
+            TECH_STACK+=("TailwindCSS")
         fi
 
         # Detect testing frameworks
