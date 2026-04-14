@@ -209,7 +209,8 @@ log_success "Core agents installed."
 needs_agent() {
     local tech=$1
     for detected in "${DETECTED_STACK[@]}"; do
-        if [[ "$detected" =~ ${tech} ]]; then
+        # Use case-insensitive grep matching to handle periods, spaces, and case variations
+        if echo "$detected" | grep -qi "$tech"; then
             return 0
         fi
     done
@@ -220,7 +221,7 @@ needs_agent() {
 log_info "Installing tech-specific agents..."
 
 # Frontend technologies
-if needs_agent "react" || needs_agent "nextjs" || needs_agent "typescript" || [ "$INSTALL_ALL" = true ]; then
+if needs_agent "react" || needs_agent "nextjs" || needs_agent "typescript" || needs_agent "alpine" || needs_agent "vite" || needs_agent "javascript" || [ "$INSTALL_ALL" = true ]; then
     if [ -f "$REPO_ROOT/.claude-agents/agents/frontend-specialist.md" ]; then
         cp "$REPO_ROOT/.claude-agents/agents/frontend-specialist.md" "$PROJECT_ROOT/.claude-agents/agents/"
         log_verbose "Installed frontend-specialist"
@@ -228,7 +229,7 @@ if needs_agent "react" || needs_agent "nextjs" || needs_agent "typescript" || [ 
 fi
 
 # Backend technologies
-if needs_agent "nodejs" || needs_agent "nestjs" || needs_agent "python" || needs_agent "laravel" || [ "$INSTALL_ALL" = true ]; then
+if needs_agent "nodejs" || needs_agent "nestjs" || needs_agent "python" || needs_agent "laravel" || needs_agent "php" || [ "$INSTALL_ALL" = true ]; then
     if [ -f "$REPO_ROOT/.claude-agents/agents/backend-specialist.md" ]; then
         cp "$REPO_ROOT/.claude-agents/agents/backend-specialist.md" "$PROJECT_ROOT/.claude-agents/agents/"
         log_verbose "Installed backend-specialist"
