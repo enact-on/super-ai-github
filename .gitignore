@@ -1,1 +1,5 @@
-.claude
+# User's local Claude Code configuration - NEVER commit this
+.claude/
+
+# But DO commit the .claude-agents directory (this contains the agents/skills)
+!.claude-agents/

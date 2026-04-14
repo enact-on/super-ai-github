@@ -1,24 +1,311 @@
 # SuperAI GitHub
 
-> Centralized OpenCode configuration for organization-wide AI development
+> 🤖 Your AI-Powered Development Assistant - Works Locally & On GitHub
 
-SuperAI GitHub provides standardized **OpenCode agents**, **skills**, and **GitHub workflows** for development teams. It enables 40+ developers across multiple technology stacks to use consistent AI coding standards while maintaining their personal OpenCode setups.
+SuperAI GitHub provides **10 specialized AI agents**, **tech-specific skills**, and **GitHub Actions workflows** that work seamlessly with Claude Code. Install as a submodule in any repository to get instant AI assistance.
+
+## ✨ Features
+
+- **🤖 10 Specialized Agents** - From code review to security audits
+- **📚 Tech-Specific Skills** - React, Next.js, Laravel, Python, Docker, K8s, and more
+- **🔧 GitHub Integration** - Automatic PR reviews, security scans, issue triage
+- **🎯 Smart Detection** - Auto-detects your tech stack and installs relevant agents
+- **📝 Prompt Templates** - Reusable templates for common tasks
+- **🔒 Non-Invasive** - Never touches your `.claude/` directory
+
+## 🚀 Quick Start
+
+### For Any Repository
+
+```bash
+# 1. Add as submodule
+git submodule add https://github.com/enact-on/super-ai-github.git .super-ai-github
+cd .super-ai-github
+
+# 2. Run installer
+./scripts/install.sh
+
+# 3. Use Claude Code normally
+claude-code
+```
+
+### What Gets Installed
+
+- **`.claude-agents/`** - All agents and skills (NEVER touches your `.claude/`)
+- **`.github/workflows/`** - Automated workflows for GitHub Actions
+- **Tech-specific agents** - Based on your project's detected tech stack
+
+## 🤖 Using Agents
+
+### Reference Agent Files
+
+All agents are in `.claude-agents/agents/` as markdown files:
+
+```bash
+# Use the orchestrator to delegate tasks
+"Read the orchestrator.md file and help me implement this feature"
+
+# Use specific specialists
+"Read the security-auditor.md file and audit this code for security issues"
+"Read the frontend-specialist.md file and review this React component"
+```
+
+### Available Agents
+
+| Agent | Role | Best For |
+|-------|------|----------|
+| **Orchestrator** | Team lead | Complex task coordination |
+| **Code Reviewer** | Quality analysis | PR reviews, code quality |
+| **Security Auditor** | Security analysis | Security audits, vulnerability scanning |
+| **Implementation** | Code writing | Feature implementation |
+| **Frontend Specialist** | React/Vue/UI | Frontend development |
+| **Backend Specialist** | API/Server logic | Backend development |
+| **Database Expert** | DB design | Database optimization |
+| **Testing Specialist** | Test strategies | Test implementation |
+| **DevOps Specialist** | Docker/K8s/CI/CD | Infrastructure |
+| **Documentation Writer** | Technical docs | Documentation |
+
+## 📚 Using Skills
+
+### Tech-Specific Skills
+
+```bash
+# React projects
+"Read .claude-agents/skills/react/SKILL.md and apply these patterns"
+
+# Next.js projects
+"Read .claude-agents/skills/nextjs/SKILL.md and help with Server Components"
+
+# Testing
+"Read .claude-agents/skills/testing/SKILL.md and write tests for this code"
+```
+
+## 🚀 GitHub Integration
+
+### Setup
+
+1. **Add GitHub Secret:**
+   - Go to repository **Settings** → **Secrets and variables** → **Actions**
+   - Add: `ANTHROPIC_API_KEY` (your Anthropic API key)
+
+2. **Push to GitHub:**
+   ```bash
+   git add .
+   git commit -m "Add SuperAI GitHub integration"
+   git push
+   ```
+
+### What Happens Automatically
+
+- **📋 PR Reviews** - Every PR gets automatic code review
+- **🔒 Security Audits** - Weekly security scans (Sundays at midnight UTC)
+- **🏷️ Issue Triage** - Automatic issue classification and labeling
+- **💬 Manual Commands** - Use `/superai help` on any issue/PR
+
+## 📋 Prompt Templates
+
+### Reusable Prompts
+
+```bash
+# Code review
+"Read .claude-agents/prompts/code-review-prompt.md and review this PR"
+
+# Security audit
+"Read .claude-agents/prompts/security-audit-prompt.md and audit this code"
+
+# Implementation
+"Read .claude-agents/prompts/implementation-prompt.md and implement this feature"
+```
+
+## 📁 Project Structure
+
+```
+your-project/
+├── .claude/                    # Your existing config (NOT touched) ✅
+├── .claude-agents/             # SuperAI agents and skills (NEW) 🆕
+│   ├── agents/                 # 10 specialized agents
+│   ├── skills/                 # Tech-specific skills
+│   ├── prompts/                # Reusable prompts
+│   └── settings.json           # Configuration
+├── .github/workflows/          # Automated workflows (NEW) 🆕
+└── .super-ai-github/           # Submodule reference
+```
+
+## 🎯 Usage Examples
+
+### Local Development
+
+```bash
+# Start Claude Code
+claude-code
+
+# Ask it to use agents
+"Read the orchestrator.md file and coordinate a code review for this PR"
+"Read the testing-specialist.md file and write tests for this function"
+"Read .claude-agents/skills/react/SKILL.md and refactor this component"
+```
+
+### GitHub Integration
+
+```bash
+# Automatic (just create PR)
+git checkout -b feature-branch
+# Make changes
+git push origin feature-branch
+# Create PR on GitHub → Automatic review happens
+
+# Manual (on any issue/PR)
+/superai help
+/superai review this code
+/superai explain the authentication logic
+```
+
+## 🔍 Tech Stack Detection
+
+The installer automatically detects your tech stack:
+
+```bash
+package.json          → React, Next.js, Vue, Node.js, TypeScript
+composer.json         → Laravel, PHP
+requirements.txt      → Python, Django, FastAPI
+go.mod               → Go
+```
+
+### Manual Override
+
+```bash
+# Install all agents and skills
+./scripts/install.sh --all
+```
+
+## 🔄 Updating
+
+```bash
+cd .super-ai-github
+git pull origin main
+./scripts/install.sh
+```
+
+## 📖 Documentation
+
+- **[USAGE.md](USAGE.md)** - Comprehensive usage guide
+- **[docs/GITHUB_SETUP.md](docs/GITHUB_SETUP.md)** - Detailed GitHub setup
+- **[MIGRATION_SUMMARY.md](MIGRATION_SUMMARY.md)** - Migration overview
+
+## 🛠️ How It Works
+
+### Local Development
+
+1. **Install** - Run the installer script
+2. **Reference** - Point Claude Code to agent/skill files
+3. **Execute** - Agents provide specialized assistance
+
+### GitHub Integration
+
+1. **Install** - Run the installer script
+2. **Push** - Push to GitHub with `ANTHROPIC_API_KEY` secret
+3. **Automate** - Workflows run automatically on PRs, issues, schedules
+
+## 🎨 Customization
+
+### Add Custom Agents
+
+```bash
+# Create your own agent
+echo "# My Custom Agent
+
+Custom instructions here..." > .claude-agents/agents/my-agent.md
+```
+
+### Add Custom Skills
+
+```bash
+# Create your own skill
+mkdir -p .claude-agents/skills/my-skill
+echo "# My Skill
+
+Custom patterns here..." > .claude-agents/skills/my-skill/SKILL.md
+```
+
+## 📊 Agent Architecture
+
+```
+User Request
+    ↓
+Orchestrator (coordinates)
+    ↓
+Technology Detection + Skill Loading
+    ↓
+Specialist Agent (executes)
+    ↓
+Code Reviewer | Security | Implementation | etc.
+    ↓
+Results (quality assistance)
+```
+
+## 🌟 Benefits
+
+### For Developers
+- **Instant AI Assistance** - No setup required, just reference agent files
+- **Specialized Expertise** - Each agent focuses on their domain
+- **Consistent Quality** - Same standards across all projects
+- **Learning Opportunity** - Get feedback from AI specialists
+
+### For Teams
+- **Scalable Code Review** - Handle 100+ repositories easily
+- **Automated Security** - Regular vulnerability scans
+- **Standardized Processes** - Same review criteria everywhere
+- **Reduced Manual Work** - Automate routine tasks
+
+### For Organizations
+- **Cost Effective** - One API key, unlimited usage
+- **Easy Onboarding** - Simple install for new repos
+- **Flexible Deployment** - Works with any tech stack
+- **Centralized Updates** - Update once, affect all repos
+
+## 🛡️ Security
+
+- **Never touches `.claude/`** - Your local config is safe
+- **API Key in GitHub Secrets** - Secure credential storage
+- **Read-only agents** - Review agents can't modify code
+- **Standard Anthropic API** - No custom providers required
+
+## 🤝 Contributing
+
+Contributions welcome! See `docs/CONTRIBUTING.md` for guidelines.
+
+## 📄 License
+
+MIT License - See LICENSE file for details
+
+---
+
+**SuperAI GitHub** - Your AI-powered development assistant 🚀
+
+*Part of the SuperAI ecosystem - Centralized AI development for teams*
 
 ## Features
 
-- **10 Role-based Agents** - Orchestrator delegates to specialized subagents (code reviewer, security auditor, testing specialist, DevOps specialist, etc.)
+- **10 Role-based Agents** - Orchestrator delegates to specialized agents (code reviewer, security auditor, testing specialist, DevOps specialist, etc.)
 - **18 Technology Skills** - Reusable patterns for React, Vue, Next.js, Laravel, Node.js, Python, Docker/K8s, and more
 - **GitHub Integration** - Automatic PR reviews, scheduled security scans, issue triage, comment-based triggers
-- **MCP Integrations** - Context7, Sequential Thinking, Memory, and more
-- **Zero Configuration** - Uses standard `.opencode/` directory, no environment variables needed
+- **Claude Code Native** - Uses standard Claude Code configuration and workflows
+- **Zero Configuration** - Uses standard `.claude/` directory structure
+- **Custom Provider Support** - Works with custom Anthropic-compatible providers
 
 ## Quick Start
 
 ### For Developers
 
-1. **Add as a submodule** to your project:
+1. **Clone or add as submodule** to your project:
    ```bash
-   git submodule add https://github.com/your-org/super-ai-github.git .super-ai-source
+   # Option 1: Clone directly
+   git clone https://github.com/enact-on/super-ai-github.git
+   cd super-ai-github
+   ./scripts/install.sh
+
+   # Option 2: Add as submodule
+   git submodule add https://github.com/enact-on/super-ai-github.git .super-ai-source
    cd .super-ai-source
    ./scripts/install.sh
    ```
@@ -26,16 +313,17 @@ SuperAI GitHub provides standardized **OpenCode agents**, **skills**, and **GitH
 2. **Use locally**:
    ```bash
    cd /path/to/your/project
-   opencode
+   claude-code
    ```
 
-3. **Check available agents**: Type `/agents` in OpenCode
+3. **Check available agents**: Type `/agents` in Claude Code
 
 ### For GitHub Integration
 
-1. Add `ZHIPU_API_KEY` to your repository secrets
-2. Push to GitHub
-3. Open a PR to see SuperAI review automatically
+1. Add `ANTHROPIC_API_KEY` to your repository secrets
+2. Add `CUSTOM_ANTHROPIC_BASE_URL` if using a custom provider
+3. Push to GitHub
+4. Open a PR to see SuperAI review automatically
 
 ## Architecture
 
@@ -60,9 +348,10 @@ This matrix approach avoids combinatorial explosion (e.g., `security-react`, `se
 
 ```
 super-ai-github/
-├── .opencode/                   # OpenCode configuration
-│   ├── opencode.json           # Main config with agents, MCP, tools
-│   ├── agent/                  # 10 Role-based agents
+├── .claude/                     # Claude Code configuration
+│   └── settings.json           # Main Claude Code settings
+├── .claude-agents/              # Agent definitions
+│   ├── agents/                 # 10 Role-based agents
 │   │   ├── orchestrator.md
 │   │   ├── code-reviewer.md
 │   │   ├── security-auditor.md
@@ -73,32 +362,17 @@ super-ai-github/
 │   │   ├── testing-specialist.md
 │   │   ├── devops-specialist.md
 │   │   └── documentation-writer.md
-│   └── skill/                  # 18 Technology-specific skills
-│       ├── react/              # React, Next.js, TypeScript
-│       ├── vue/                # Vue.js, Nuxt
-│       ├── nextjs/             # Next.js 14+ App Router
-│       ├── laravel/            # Laravel, PHP
-│       ├── nodejs/             # Node.js, Express
-│       ├── nestjs/             # NestJS framework
-│       ├── python/             # Python, FastAPI, Django
-│       ├── typescript/         # TypeScript patterns
-│       ├── testing/            # Jest, Vitest, PHPUnit, pytest
-│       ├── docker-k8s/         # Docker, Kubernetes
-│       ├── api-design/         # REST, GraphQL, OpenAPI
-│       ├── documentation/      # Documentation standards
-│       ├── frontend-design/    # UI/UX patterns (bundled)
-│       ├── code-review/        # Code review (bundled)
-│       └── security-guidance/  # Security best practices (bundled)
+│   ├── skills/                 # Technology-specific skills
+│   └── prompts/                # Reusable prompt templates
 ├── scripts/
 │   ├── install.sh              # Main installer
 │   ├── detect-tech-stack.sh    # Tech detection
 │   └── update.sh               # Update to latest
 └── .github/workflows/
-    ├── opencode-review.yml     # PR review (all PRs)
-    ├── opencode-security.yml   # Weekly security scan
-    ├── opencode-issues.yml     # Issue triage
-    ├── opencode-comment.yml    # /superai command
-    └── meeting-ai.yml          # Meeting transcript processing
+    ├── claude-review.yml       # PR review (all PRs)
+    ├── claude-security.yml     # Weekly security scan
+    ├── claude-issues.yml       # Issue triage
+    └── claude-comment.yml      # /superai command
 ```
 
 ## Available Agents
@@ -149,16 +423,6 @@ super-ai-github/
 | `code-review` | Code review patterns | Code reviews |
 | `security-guidance` | Security best practices | Security considerations |
 
-## MCP Integrations
-
-| MCP Server | Status | Description |
-|------------|--------|-------------|
-| `context7` | Enabled | Library documentation and code context |
-
-**Context7 MCP** provides up-to-date documentation for popular libraries and frameworks. When you ask about React, Next.js, or other frameworks, it fetches the latest docs automatically.
-
-> **Note**: Only verified free public remote MCPs are included. To add more MCPs, update `opencode.json` and ensure they are publicly accessible.
-
 ## GitHub Workflows
 
 ### Automatic PR Review
@@ -172,7 +436,7 @@ Every PR is automatically reviewed by SuperAI when opened or updated. The review
 
 ### Security Audit (Weekly)
 
-Runs every Monday at 9am UTC, checking for:
+Runs every Sunday at midnight UTC, checking for:
 - **OWASP Top 10** vulnerabilities with CWE references
 - **Dependency vulnerabilities** with CVE references
 - **Exposed secrets** - API keys, passwords, tokens
@@ -193,68 +457,22 @@ New issues are automatically triaged with:
 Trigger SuperAI manually on issues/PRs:
 - `/superai <your request>`
 - `/sai <your request>`
+- `/claude <your request>`
 
-### Meeting AI
+## Requirements
 
-Intelligent meeting transcript processing with smart task/people matching:
+- [Claude Code](https://claude.ai/code) v1.0 or higher
+- Node.js 18+ (for installer scripts)
+- Bash shell (Linux/macOS/WSL)
+- GitHub account (for GitHub integration)
 
-**Usage:**
-1. `/meeting-ai paste <transcript>` - Paste meeting minutes/transcript
-2. AI extracts actions and shows table with confidence levels
-3. `/meeting-ai feedback <comments>` - Provide feedback to revise proposals
-4. `/meeting-ai approve` - Execute all approved actions
+## License
 
-**Smart Features:**
-- **Task Matching** - Semantic search to find right issues/PRs
-- **People Detection** - Uses CODEOWNERS, contributor history, team membership
-- **Custom Fields** - Labels, milestones, projects, assignees
+MIT
 
-**Supported Actions:**
-| Action | Description |
-|--------|-------------|
-| `close_issue` | Close completed issues |
-| `reopen_issue` | Reopen issues needing more work |
-| `add_comment` | Add meeting context to issues |
-| `update_labels` | Change issue labels |
-| `set_milestone` | Update milestones |
-| `create_issue` | Create new issues from discussion |
-| `assign_user` | Assign/reassign issues |
-| `request_review` | Request PR reviews |
-| `merge_pr` | Merge approved PRs |
-| `close_pr` | Close PRs |
+---
 
-**Confidence Legend:**
-- 🟢 High confidence: Strong match found
-- 🟡 Medium confidence: Likely match
-- 🔴 Low confidence: Please verify before approving
-
-## Delegation Decision Tree
-
-The orchestrator uses this decision tree for task routing:
-
-```
-User Request
-    │
-    ├─ REVIEW task?
-    │   ├─ Code review → @code-reviewer
-    │   ├─ Security review → @security-auditor
-    │   └─ Architecture review → @backend + @frontend specialists
-    │
-    ├─ IMPLEMENTATION task?
-    │   ├─ Frontend code → @frontend-specialist (+ react/vue skill)
-    │   ├─ Backend code → @backend-specialist (+ nodejs/laravel/python skill)
-    │   ├─ Database work → @database-expert
-    │   ├─ Full feature → @implementation (coordinate specialists)
-    │   └─ Tests → @testing-specialist (+ testing skill)
-    │
-    ├─ DEVOPS task?
-    │   ├─ Docker/K8s → @devops-specialist (+ docker-k8s skill)
-    │   ├─ CI/CD → @devops-specialist
-    │   └─ Deployment → @devops-specialist
-    │
-    └─ DOCUMENTATION task?
-        └─ Any docs → @documentation-writer (+ documentation skill)
-```
+**SuperAI GitHub** - Centralized Claude Code configuration for organization-wide AI development
 
 ## Updating
 
@@ -271,54 +489,25 @@ See [CONTRIBUTING.md](docs/CONTRIBUTING.md) for guidelines on adding agents and 
 
 ### Adding a New Agent
 
-1. Create `agent/my-agent.md` with YAML frontmatter:
-   ```yaml
-   ---
-   description: Clear description of the agent's role
-   mode: subagent
-   temperature: 0.2
-   tools:
-     write: true/false
-     edit: true/false
-     bash: true/false
-   ---
-   ```
-
-2. Add agent to `opencode.json` under the `agent` key
-
-3. Update orchestrator.md to include the new agent
+1. Create `.claude-agents/agents/my-agent.md` with proper structure
+2. Include clear description of the agent's role and expertise
+3. Update orchestrator.md to include the new agent in delegation logic
 
 ### Adding a New Skill
 
-1. Create `skill/my-skill/SKILL.md` with YAML frontmatter:
-   ```yaml
-   ---
-   name: my-skill
-   description: When to use this skill
-   license: MIT
-   compatibility: opencode
-   ---
-   ```
-
+1. Create `.claude-agents/skills/my-skill/SKILL.md`
 2. Include comprehensive patterns, examples, and best practices
-
 3. Update orchestrator.md to include the new skill
 
-## Requirements
+## Environment Variables
 
-- [OpenCode](https://opencode.ai/) v0.1.x or higher
-- Node.js 18+ (for installer scripts)
-- Bash shell (Linux/macOS/WSL)
+- `ANTHROPIC_API_KEY` - Your Anthropic API key (or custom provider key)
+- `CUSTOM_ANTHROPIC_BASE_URL` - Optional: Custom provider base URL
+- `CLAUDE_CODE_CONFIG_DIR` - Defaults to `.claude-agents`
 
-## License
+## GitHub Secrets Required
 
-MIT
+For GitHub integration, add these secrets to your repository:
 
----
-
-**Sources**:
-- [OpenCode Documentation](https://opencode.ai/docs/)
-- [Claude Plugins Registry](https://claude-plugins.dev/)
-- [OpenCode Multi-Agent Setup Guide](https://amirteymoori.com/opencode-multi-agent-setup-specialized-ai-coding-agents/)
-- [OWASP Top 10](https://owasp.org/www-project-top-ten/)
-- [CWE Database](https://cwe.mitre.org/)
+- `ANTHROPIC_API_KEY` - Required: API key for Claude Code
+- `CUSTOM_ANTHROPIC_BASE_URL` - Optional: Custom provider URL

@@ -1,7 +1,7 @@
 #!/bin/bash
 #
 # SuperAI GitHub - Update Script
-# Updates the SuperAI configuration to the latest version.
+# Updates the SuperAI agents and skills to the latest version.
 #
 # Usage: ./scripts/update.sh [options]
 #
@@ -28,12 +28,12 @@ log_error() { echo -e "${RED}[ERROR]${NC} $1"; }
 
 echo ""
 echo -e "${BLUE}╔══════════════════════════════════════════════════════════╗${NC}"
-echo -e "${BLUE}║${NC}              SuperAI GitHub - Updater                 ${BLUE}║${NC}"
+echo -e "${BLUE}║${NC}          SuperAI GitHub - Update Script               ${BLUE}║${NC}"
 echo -e "${BLUE}╚══════════════════════════════════════════════════════════╝${NC}"
 echo ""
 
 # Check if installed
-if [ ! -f "$PROJECT_ROOT/.super-ai-install.json" ]; then
+if [ ! -f "$PROJECT_ROOT/.claude-install.json" ]; then
     log_error "SuperAI is not installed in this project."
     log_info "Run './scripts/install.sh' first."
     exit 1
@@ -50,5 +50,5 @@ if [ -d "$REPO_ROOT/.git" ]; then
 fi
 
 # Re-run installer with auto-confirm
-log_info "Reinstalling SuperAI configuration..."
+log_info "Updating SuperAI agents and skills..."
 exec "$SCRIPT_DIR/install.sh" --yes
