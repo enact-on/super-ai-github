@@ -24,7 +24,18 @@ NC='\033[0m' # No Color
 # Script directory
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
-PROJECT_ROOT="$(pwd)"
+
+# Find the actual project root (parent of .super-ai-github)
+# Check if we're inside the submodule directory
+CURRENT_DIR="$(pwd)"
+if [[ "$CURRENT_DIR" == *".super-ai-github"* ]] || [[ "$CURRENT_DIR" == *".super-ai-source"* ]]; then
+    # We're inside the submodule, go to parent directory
+    PROJECT_ROOT="$(cd "$CURRENT_DIR/.." && pwd)"
+    log_info "Detected we're inside submodule, using parent project directory: $PROJECT_ROOT"
+else
+    # We're in the main project directory
+    PROJECT_ROOT="$CURRENT_DIR"
+fi
 
 # Options
 AUTO_CONFIRM=false
