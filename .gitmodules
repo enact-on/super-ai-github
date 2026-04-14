@@ -1,0 +1,3 @@
+[submodule "vendor/ai-agent-config"]
+	path = vendor/ai-agent-config
+	url = https://github.com/enact-on/ai-agent-config.git
